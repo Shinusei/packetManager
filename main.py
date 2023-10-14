@@ -1,49 +1,73 @@
 import requests
-import json
+import sys
 
-def get_dependencies(package_name):
-    """
-    Возвращает список зависимостей пакета npm.
 
-    Args:
-        package_name: Имя пакета npm.
+def get_list(pack):
+    packs = set()
+    requests.head("https://pypi.org/pypi/", timeout=1)
+    url = "https://pypi.org/pypi/" + pack + "/json"
+    json = requests.get(url).json()
+    if "message" in json:
+        return
+    else:
+        list_of_deps = json['info']['requires_dist']
+        if list_of_deps:
+            for i in range(len(list_of_deps)):
+                list_of_deps[i] = list_of_deps[i].split(";")[0]
 
-    Returns:
-        Список зависимостей пакета.
-    """
+            list_of_deps = set(list_of_deps)
+            list_of_deps = list(list_of_deps)
+            for i in range(len(list_of_deps)):
+                package_name = list_of_deps[i]
+                if package_name.find(">") != -1:
+                    package_name = package_name[:package_name.find(">"):]
+                if package_name.find("<") != -1:
+                    package_name = package_name[:package_name.find("<"):]
+                if package_name.find("^") != -1:
+                    package_name = package_name[:package_name.find("^"):]
+                if package_name.find("`") != -1:
+                    package_name = package_name[:package_name.find("~"):]
+                if package_name.find(" ") != -1:
+                    package_name = package_name[:package_name.find(" "):]
+                if package_name.find("=") != -1:
+                    package_name = package_name[:package_name.find("="):]
+                if package_name.find("[") != -1:
+                    package_name = package_name[:package_name.find("["):]
+                if (package_name != pack and package_name != sys.argv[1]):
+                    packs.add(package_name)
+            packs = list(packs)
+            for i in range(len(packs)):
+                packs[i] = (packs[i], 1, pack)
+            return packs
 
-    url = f"https://registry.npmjs.org/package/{package_name}/dist-tags/latest"
-    response = requests.get(url)
-    data = json.loads(response.text)
-    return data["dependencies"]
 
-def generate_graph(dependencies):
-    """
-    Генерирует граф зависимостей пакета npm.
+def print_list(T, number):
+    queue = T
+    while queue:
+        V = queue.pop(0)
+        print('   "' + str(V[2]) + '"->"' + V[0] + '"')
+        if V[1] < number:
+            temp = get_list(V[0])
+            if temp:
+                for i in range(len(temp)):
+                    temp[i] = (temp[i][0], V[1] + 1, temp[i][2])
+                for i in temp:
+                    queue.insert(0, i)
 
-    Args:
-        dependencies: Список зависимостей пакета.
 
-    Returns:
-        Текст графа зависимостей на языке Graphviz.
-    """
-
-    graph = ""
-    for dependency in dependencies:
-        graph += f"    {dependency} -> {dependency}\n"
-        for child_dependency in dependencies[dependency]:
-            graph += f"    {dependency} -> {child_dependency}\n"
-    return graph
-
-def main():
-    """
-    Основная функция.
-    """
-
-    package_name = input("Введите имя пакета npm: ")
-    dependencies = get_dependencies(package_name)
-    graph = generate_graph(dependencies)
-    print(graph)
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__" and len(sys.argv) > 1:
+    if (len(sys.argv) > 2):
+        pack = sys.argv[1]
+        requests.head("https://pypi.org/pypi/", timeout=1)
+        url = "https://pypi.org/pypi/" + pack + "/json"
+        json = requests.get(url).json()
+        if "message" in json:
+            print("Package not found")
+        else:
+            print("digraph G {")
+            print_list(get_list(sys.argv[1]), int(sys.argv[2]))
+            print("}")
+    else:
+        print("Write deep number")
+else:
+    print("Write package name")
